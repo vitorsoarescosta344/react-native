@@ -29,10 +29,10 @@ const PODS = PLAIN.replace(
   'AA0000000000000000000901 /* Debug */ = {\n\t\t\tisa = XCBuildConfiguration;\n\t\t\tbaseConfigurationReference = BB0000000000000000000001 /* Pods-MyApp.debug.xcconfig */;\n\t\t\tbuildSettings = {',
 );
 
-// Derive a variant whose app-target configs already carry HEADER_SEARCH_PATHS
-// as a plain scalar (ordinary, valid pbxproj) — the state injection promotes to
-// an array.
-function withScalarHeaderSearchPaths(value) {
+// Derive a variant whose app-target configs already carry HEADER_SEARCH_PATHS,
+// set to any valid pbxproj value: a plain scalar (which injection promotes to an
+// array) or an array injection appends to.
+function withHeaderSearchPaths(value) {
   return PLAIN.replaceAll(
     'PRODUCT_BUNDLE_IDENTIFIER = com.example.MyApp;',
     `HEADER_SEARCH_PATHS = ${value};\n\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.example.MyApp;`,
@@ -253,7 +253,7 @@ describe('injectSpmIntoPbxproj — Tier 2 (build settings + phase)', () => {
   ])(
     'promotes a pre-existing HEADER_SEARCH_PATHS scalar (%s) to an array, keeping its value and one $(inherited)',
     (scalar, expectedMembers) => {
-      const {text} = inject(withScalarHeaderSearchPaths(scalar));
+      const {text} = inject(withHeaderSearchPaths(scalar));
       const arrays = [
         ...text.matchAll(/HEADER_SEARCH_PATHS = \(\n([\s\S]*?)\t+\);/g),
       ].map(m =>
@@ -266,6 +266,20 @@ describe('injectSpmIntoPbxproj — Tier 2 (build settings + phase)', () => {
       expect(arrays).toEqual([expectedMembers, expectedMembers]);
     },
   );
+
+  it('appends to a pre-existing ONE-LINE HEADER_SEARCH_PATHS array in place', () => {
+    const {text} = inject(withHeaderSearchPaths('("$(inherited)", )'));
+    expect(isBalanced(text)).toBe(true);
+    const arrays = [
+      ...text.matchAll(/HEADER_SEARCH_PATHS = \(([^\n]*)\);/g),
+    ].map(m => m[1]);
+    // Both app-target configs, each keeping the one-line shape it was written in.
+    expect(arrays).toEqual(
+      Array(2).fill(
+        '"$(inherited)", "$(SRCROOT)/build/generated/autolinking/headers", ',
+      ),
+    );
+  });
 
   it('adds one generated embed phase immediately after Frameworks', () => {
     const {text} = inject(PLAIN);
