@@ -129,7 +129,7 @@ accepts kebab-case equivalents (e.g. `--skip-codegen`).
 
 | Option | Description |
 |---|---|
-| `--version <ver>` | RN version (default: from package.json) |
+| `--version <ver>` | RN version. Resolved in this order: this flag, then the version a previous `--version` pinned into `.spm-injected.json`, then `node_modules/react-native/package.json`. Pass it once — later runs reuse the pin (see [Pinning the React Native version](#pinning-the-react-native-version)) |
 | `--yes` | Skip the dirty-pbxproj confirmation prompt |
 | `--xcodeproj <path>` | [add] Which `.xcodeproj` to inject into (when several exist) |
 | `--productName <name>` | [add] Which app target to inject into (when several exist) |
@@ -137,6 +137,25 @@ accepts kebab-case equivalents (e.g. `--skip-codegen`).
 | `--artifacts <path>` | [advanced] Local artifact root containing complete `debug/` and `release/` cache slots |
 | `--download <auto\|skip\|force>` | [advanced] Artifact download policy (default: auto) |
 | `--skipCodegen` | [advanced] Skip the codegen step |
+
+### Pinning the React Native version
+
+The resolved version selects **which artifact slots the project is wired to**, so
+it has to stay the same from one run to the next. `--version` is therefore
+recorded in the `.spm-injected.json` marker (as `artifactsVersionOverride`) and
+read back by later runs, which resolve the version in this order:
+
+1. an explicit `--version <ver>`,
+2. the version a previous `--version` pinned into the marker,
+3. `node_modules/react-native/package.json`.
+
+So you pass the flag once, and a later flagless `add`/`update` stays on the slots
+it selected. Without the pin, that flagless run falls back to `package.json` and
+re-points the project at different artifact slots while the marker still
+advertises the pinned version.
+
+`deinit` deletes the marker, and with it the pin — a later `add` resolves
+`node_modules/react-native/package.json` again unless you pass `--version`.
 
 ### Debug/Release flavor is automatic
 
@@ -161,7 +180,7 @@ package graph, or require a second build.
 | Path | Commit? | Why |
 |------|---------|-----|
 | `MyApp.xcodeproj/` | Yes | Your project, with SwiftPM injected in place. Holds your signing, capabilities, Build Phases — `add` only adds SwiftPM refs/settings, additively. |
-| `MyApp.xcodeproj/.spm-injected.json` | Yes | Marker recording every edit `add` made, so `deinit` can surgically reverse it and re-runs stay idempotent. |
+| `MyApp.xcodeproj/.spm-injected.json` | Yes | Marker recording every edit `add` made, so `deinit` can surgically reverse it and re-runs stay idempotent. Also holds the `--version` pin (`artifactsVersionOverride`) that keeps later runs on the same artifact slots. |
 | `build/generated/` | No | Codegen/autolinking output; regenerated |
 | `build/xcframeworks/` | No | Symlinks to the machine-local artifact cache |
 | `Package.resolved` | No | SwiftPM resolution file; machine-specific |
