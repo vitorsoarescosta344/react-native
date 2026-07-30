@@ -1856,9 +1856,9 @@ function readMarker(
 
 // Returns the `*.xcodeproj` under `appRoot` carrying a `.spm-injected.json`
 // marker (the user-owned project SPM packages were injected into in place),
-// or null when none has been injected yet. Pure fs reads — safe for the
-// build-time sync (sync-spm-autolinking.js, via readArtifactsVersionOverride
-// below) to call without pulling in any pbxproj-editing machinery at runtime.
+// or null when none has been injected yet. Pure fs reads — no pbxproj-editing
+// machinery, so cheap callers (action resolution, readArtifactsVersionOverride
+// below) can use it freely.
 function findInjectedXcodeproj(appRoot /*: string */) /*: string | null */ {
   let entries /*: Array<{name: string, isDirectory(): boolean}> */ = [];
   try {
@@ -1884,11 +1884,11 @@ function findInjectedXcodeproj(appRoot /*: string */) /*: string | null */ {
  * update --version` pinned into the injected xcodeproj's `.spm-injected.json`
  * marker (see the field's doc comment in injectSpmIntoExistingXcodeproj
  * below), or null when no project is injected yet, no override is pinned, or
- * the marker can't be read (never throws). Pure fs reads — the build-time
- * sync (sync-spm-autolinking.js) calls this to prefer the pinned version over
- * the one derived from node_modules/react-native/package.json, so a
- * version-mismatched setup keeps healing against the SAME artifact slot the
- * explicit `--version` selected.
+ * the marker can't be read (never throws). Pure fs reads — setup-apple-spm.js's
+ * determineVersion prefers the pinned version over the one derived from
+ * node_modules/react-native/package.json, so a later flagless `add`/`update`
+ * (and `download`) stays on the SAME artifact slot the explicit `--version`
+ * selected.
  */
 function readArtifactsVersionOverride(appRoot /*: string */) /*: ?string */ {
   const xcodeprojPath = findInjectedXcodeproj(appRoot);
@@ -2014,9 +2014,9 @@ function injectSpmIntoExistingXcodeproj(
   // intentional pin, not something to silently re-derive from
   // node_modules/react-native/package.json. There is no "clear" verb yet;
   // `deinit` (removeSpmInjection) drops the whole marker, including this
-  // field. Read back by readArtifactsVersionOverride (above) so the
-  // build-time sync (sync-spm-autolinking.js) heals against the SAME slot
-  // `add`/`update` selected, even on a version-mismatched setup.
+  // field. Read back by readArtifactsVersionOverride (above) so a later
+  // flagless `add`/`update`/`download` resolves to the SAME slot, even on a
+  // version-mismatched setup.
   const artifactsVersionOverride =
     opts.artifactsVersionOverride ??
     prevMarker?.artifactsVersionOverride ??

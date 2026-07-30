@@ -44,8 +44,10 @@
  * directing you to `--deintegrate`).
  *
  * Options:
- *   --version <ver>             React Native version (default: the resolved
- *                               node_modules/react-native version).
+ *   --version <ver>             React Native version. Pinned into
+ *                               .spm-injected.json and reused by later runs
+ *                               until a new one is passed (default: the
+ *                               resolved node_modules/react-native version).
  *   --yes                       Skip the dirty-pbxproj confirmation prompt.
  *   [add] --xcodeproj <path>    Which .xcodeproj to inject into (when several).
  *   [add] --product-name <name> Which app target to inject into (when several).
@@ -89,10 +91,12 @@ const {
 const {main: generatePackage} = require('./spm/generate-spm-package');
 const {findSourcePath} = require('./spm/generate-spm-package');
 const {
+  SPM_INJECTED_MARKER,
   cleanupDanglingJavaScriptCoreRef,
   cleanupLeftoverPodsGroup,
   findInjectedXcodeproj,
   injectSpmIntoExistingXcodeproj,
+  readArtifactsVersionOverride,
   removeSpmInjection,
 } = require('./spm/generate-spm-xcodeproj');
 const {scaffoldAll} = require('./spm/scaffold-package-swift');
@@ -149,7 +153,7 @@ function parseArgs(argv /*: Array<string> */) /*: SetupArgs */ {
     .option('version', {
       type: 'string',
       describe:
-        'React Native version (e.g. 0.80.0). Defaults to the version in node_modules/react-native/package.json',
+        'React Native version (e.g. 0.80.0). Sticks: later runs reuse it until you pass a new one. Defaults to the version in node_modules/react-native/package.json',
     })
     .option('yes', {
       type: 'boolean',
@@ -373,19 +377,31 @@ function resolveReactNativeRoot(
   return reactNativeRoot;
 }
 
+// Explicit `--version` → the version an earlier `--version` pinned into the
+// injection marker → node_modules/react-native/package.json. The pin makes
+// `--version` stick for later flagless runs, which would otherwise re-point the
+// project at a different artifact slot than the one it was wired to.
 function determineVersion(
   args /*: SetupArgs */,
   reactNativeRoot /*: string */,
+  appRoot /*: string */,
 ) /*: string */ {
-  let version = args.version;
-  if (version == null) {
-    // $FlowFixMe[incompatible-type] JSON.parse returns any
-    const pkgJson /*: {version: string} */ = JSON.parse(
-      fs.readFileSync(path.join(reactNativeRoot, 'package.json'), 'utf8'),
-    );
-    version = pkgJson.version;
+  if (args.version != null) {
+    return args.version;
   }
-  return version;
+  const pinned = readArtifactsVersionOverride(appRoot);
+  if (pinned != null) {
+    log(
+      `Using version ${pinned} pinned in ${SPM_INJECTED_MARKER} by an earlier ` +
+        '--version. Pass --version to change it.',
+    );
+    return pinned;
+  }
+  // $FlowFixMe[incompatible-type] JSON.parse returns any
+  const pkgJson /*: {version: string} */ = JSON.parse(
+    fs.readFileSync(path.join(reactNativeRoot, 'package.json'), 'utf8'),
+  );
+  return pkgJson.version;
 }
 
 function runCodegenStep(
@@ -438,7 +454,7 @@ async function runScaffold(
   // a comment — that's how SPM's manifest hash bumps on slot transitions.
   let cacheSlotLabel /*: ?string */ = null;
   try {
-    const rawVersion = args.version ?? determineVersion(args, reactNativeRoot);
+    const rawVersion = determineVersion(args, reactNativeRoot, appRoot);
     const slotVersion = await resolveCacheSlotVersion(rawVersion);
     cacheSlotLabel = `${slotVersion}/dual-flavor`;
   } catch {
@@ -1048,7 +1064,7 @@ async function main(argv /*:: ?: Array<string> */) /*: Promise<void> */ {
     autolinkingConfigResult,
     projectRoot,
   );
-  const version = determineVersion(args, reactNativeRoot);
+  const version = determineVersion(args, reactNativeRoot, appRoot);
   log(`React Native version: ${version}`);
 
   // Resolve remote SPM mode ONCE up front. remotePackageConfig throws
@@ -1210,6 +1226,7 @@ if (require.main === module) {
 module.exports = {
   main,
   detectStandardRnLayoutRedirect,
+  determineVersion,
   findInjectedXcodeproj,
   generateAutolinkingConfigOrFailClosed,
   parseArgs,
