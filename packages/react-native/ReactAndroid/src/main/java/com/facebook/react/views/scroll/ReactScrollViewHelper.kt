@@ -11,11 +11,9 @@ import android.animation.Animator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Point
-import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.widget.OverScroller
-import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat.FocusDirection
 import androidx.core.view.ViewCompat.FocusRealDirection
 import com.facebook.common.logging.FLog
@@ -226,10 +224,13 @@ public object ReactScrollViewHelper {
     scrollListeners.add(WeakReference(listener))
   }
 
-  @RequiresApi(Build.VERSION_CODES.N)
   @JvmStatic
   public fun removeScrollListener(listener: ScrollListener) {
-    scrollListeners.removeIf { it.get() == null || it.get() == listener }
+    val iterator = scrollListeners.iterator()
+    while (iterator.hasNext()) {
+      val ref = iterator.next()
+      if (ref.get() == null || ref.get() == listener) iterator.remove()
+    }
   }
 
   @JvmStatic
@@ -237,10 +238,13 @@ public object ReactScrollViewHelper {
     layoutChangeListeners.add(WeakReference(listener))
   }
 
-  @RequiresApi(Build.VERSION_CODES.N)
   @JvmStatic
   public fun removeLayoutChangeListener(listener: LayoutChangeListener) {
-    layoutChangeListeners.removeIf { it.get() == null || it.get() == listener }
+    val iterator = layoutChangeListeners.iterator()
+    while (iterator.hasNext()) {
+      val ref = iterator.next()
+      if (ref.get() == null || ref.get() == listener) iterator.remove()
+    }
   }
 
   /**
